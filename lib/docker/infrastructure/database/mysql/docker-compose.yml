@@ -1,0 +1,77 @@
+version: '3.7'
+
+services:
+  mysql:
+    image: docker.io/library/mysql
+    command: ['--default-authentication-plugin=mysql_native_password', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci']
+    hostname: mysql
+    cap_add:
+      - SYS_NICE  # CAP_SYS_NICE
+    environment:
+      - "MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}"
+      - "TZ=${DEFAULT_TIMEZONE}"
+      - "MYSQL_DATABASE=${NEW_DB}"
+      - "MYSQL_USER=${NEW_USER}"
+      - "MYSQL_PASSWORD=${NEW_USER_PASS}"
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - core-infra
+    restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  myadmin:
+    image: docker.io/phpmyadmin
+    hostname: myadmin
+    environment:
+      - "TZ=${DEFAULT_TIMEZONE}"
+      - "MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}"
+      - "PMA_ARBITRARY=1"
+    ports:
+      - '${MYADMIN_PORT}:80'
+    networks:
+      - core-infra
+      - core-apps
+    depends_on:
+      - mysql
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  backup:
+    image: docker.io/databack/mysql-backup
+    hostname: mysqlbackup
+    user: "0"
+    environment:
+      - "TZ=${DEFAULT_TIMEZONE}"
+      - "DB_SERVER=mysql"
+      - "DB_PORT=3306"
+      - "DB_USER=root"
+      - "DB_PASS=${MYSQL_ROOT_PASSWORD}"
+      - "DB_DUMP_TARGET=/backups"
+      - "DB_DUMP_SAFECHARS=1"
+    networks:
+      - core-infra
+    depends_on:
+      - mysql
+    volumes:
+      - mysql_backup:/backups
+    restart: always
+
+volumes:
+  mysql_data:
+  mysql_backup:
+
+networks:
+  core-apps:
+    external: true
+  core-infra:
+    external: true
